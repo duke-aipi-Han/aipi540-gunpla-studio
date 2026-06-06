@@ -1,0 +1,6 @@
+# Python 3.13 NVIDIA GPU dependencies for YOLO training.
+# Install this before requirements.txt so ultralytics reuses the CUDA PyTorch wheel.
+--index-url https://download.pytorch.org/whl/cu128
+
+torch>=2.11.0
+torchvision>=0.26.0
