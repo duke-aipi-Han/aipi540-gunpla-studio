@@ -71,12 +71,14 @@ python main.py
 
 The app will start a local Gradio server. Upload a Gunpla image or take one with a phone camera, choose a segmentation method, then choose a default or uploaded background.
 
+To add reusable backgrounds, place image files in the top-level `backgrounds` folder. The app also loads packaged backgrounds from `gunpla_studio/backgrounds`. Supported extensions are `.jpg`, `.jpeg`, `.png`, `.bmp`, and `.webp`. The app displays each background by filename without the extension.
+
 ## Data
 
 Expected training data format is YOLO segmentation format:
 
 ```text
-data/processed/gunpla_seg/
+data/processed/gunpla-yolov7/
 ├── data.yaml
 ├── train
 │   ├── images
@@ -94,20 +96,38 @@ Each label file should contain one class, `gunpla`, with polygon coordinates nor
 If you have a Roboflow/Label Studio/CVAT export ZIP, place it in `data/raw` and run:
 
 ```bash
-python scripts/make_dataset.py --zip-path data/raw/your_export.zip --output-dir data/processed/gunpla_seg
+python scripts/make_dataset.py --zip-path data/raw/your_export.zip --output-dir data/processed/gunpla-yolov7
 ```
 
-## Train YOLO11n-Seg
+## Train YOLO11n
+
+Check the dataset first:
 
 ```bash
-python scripts/train_model.py --data data/processed/gunpla_seg/data.yaml --epochs 50 --imgsz 640
+python scripts/train_model.py --validate-only
+```
+
+Start transfer-learning training on GPU 0:
+
+```bash
+python scripts/train_model.py --device 0
+```
+
+Training uses a default augmentation mix for robustness: color jitter, small rotations, translation, scale, shear, mild perspective, horizontal flips, light vertical flips, mosaic, mixup, copy-paste, and random erasing. To run an ablation without augmentation:
+
+```bash
+python scripts/train_model.py --device 0 --no-augment
 ```
 
 To force a specific GPU:
 
 ```bash
-python scripts/train_model.py --data data/processed/gunpla_seg/data.yaml --epochs 50 --imgsz 640 --device 0
+python scripts/train_model.py --data data/processed/gunpla-yolov7/data.yaml --epochs 50 --imgsz 640 --batch 4 --workers 0 --device 0
 ```
+
+The default dataset is `data/processed/gunpla-yolov7/data.yaml`. The script inspects the labels before training. This dataset has YOLO polygon segmentation labels, so the default transfer-learning base model is `yolo11n-seg.pt`. If Roboflow split paths need correction, the script writes an Ultralytics-ready data file under `data/processed/gunpla-yolov7-ultralytics`.
+
+On Windows, keep `--workers 0` unless you have plenty of RAM and page file space. Multiple dataloader worker processes can each load PyTorch CUDA DLLs and trigger `[WinError 1455] The paging file is too small`.
 
 The best model is copied to:
 
