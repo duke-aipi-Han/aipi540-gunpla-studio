@@ -112,6 +112,10 @@ class YOLOSegSegmenter(BaseSegmenter):
         height, width = rgb.shape[:2]
 
         if not results or results[0].masks is None:
+            obb_mask = _mask_from_obb_result(results[0], width, height) if results else None
+            if obb_mask is not None:
+                return SegmentationResult(obb_mask, self.name, "Used YOLO OBB polygon as a coarse mask.")
+
             fallback = ClassicalMLSegmenter().segment(image)
             return SegmentationResult(fallback.mask, self.name, "No YOLO mask found. Used classical fallback.")
 
@@ -131,3 +135,24 @@ def _postprocess_mask(mask: np.ndarray) -> np.ndarray:
     mask_u8 = cv2.morphologyEx(mask_u8, cv2.MORPH_CLOSE, kernel)
     mask_u8 = cv2.morphologyEx(mask_u8, cv2.MORPH_OPEN, kernel)
     return (mask_u8 / 255.0).astype(np.float32)
+
+
+def _mask_from_obb_result(result, width: int, height: int) -> np.ndarray | None:
+    obb = getattr(result, "obb", None)
+    if obb is None or len(obb) == 0:
+        return None
+
+    try:
+        points = obb.xyxyxyxy.cpu().numpy()
+        scores = obb.conf.cpu().numpy()
+    except AttributeError:
+        return None
+
+    best_idx = int(np.argmax(scores))
+    polygon = points[best_idx].reshape(-1, 2)
+    polygon[:, 0] = np.clip(polygon[:, 0], 0, width - 1)
+    polygon[:, 1] = np.clip(polygon[:, 1], 0, height - 1)
+
+    mask = np.zeros((height, width), dtype=np.uint8)
+    cv2.fillPoly(mask, [polygon.astype(np.int32)], 255)
+    return _postprocess_mask(mask / 255.0)

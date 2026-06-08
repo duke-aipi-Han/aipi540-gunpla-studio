@@ -15,10 +15,11 @@ data/*
 !data/outputs/.gitkeep
 
 models/*
+!models/gunpla_yolo11n_seg.pt
 !models/.gitkeep
 
 notebooks/.ipynb_checkpoints/
-*.pt
+/*.pt
 *.onnx
 *.engine
 runs/

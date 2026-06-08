@@ -1,28 +1,55 @@
 from __future__ import annotations
 
-from PIL import Image, ImageDraw
+from pathlib import Path
+
+from PIL import Image
 
 
-DEFAULT_BACKGROUNDS = {
-    "Studio gray": ((236, 238, 241), (186, 192, 201)),
-    "Hangar blue": ((197, 216, 232), (74, 101, 132)),
-    "Sunset display": ((255, 213, 164), (155, 86, 117)),
-    "Workbench": ((226, 204, 170), (122, 101, 78)),
-}
+BACKGROUND_DIR = Path("backgrounds")
+PACKAGE_BACKGROUND_DIR = Path(__file__).parent / "backgrounds"
+BACKGROUND_DIRS = (BACKGROUND_DIR, PACKAGE_BACKGROUND_DIR)
+BACKGROUND_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+
+FALLBACK_BACKGROUND_COLOR = (236, 238, 241)
 
 
-def make_default_background(name: str, size: tuple[int, int]) -> Image.Image:
-    top, bottom = DEFAULT_BACKGROUNDS.get(name, DEFAULT_BACKGROUNDS["Studio gray"])
-    width, height = size
-    image = Image.new("RGB", size, top)
-    draw = ImageDraw.Draw(image)
+def get_background_choices(background_dirs: tuple[Path, ...] = BACKGROUND_DIRS) -> list[str]:
+    choices = list_background_files(background_dirs)
+    if choices:
+        return choices
+    return ["Studio gray"]
 
-    for y in range(height):
-        ratio = y / max(height - 1, 1)
-        color = tuple(int(top[i] * (1 - ratio) + bottom[i] * ratio) for i in range(3))
-        draw.line([(0, y), (width, y)], fill=color)
 
-    floor_y = int(height * 0.72)
-    draw.rectangle([(0, floor_y), (width, height)], fill=tuple(max(c - 18, 0) for c in bottom))
-    draw.line([(0, floor_y), (width, floor_y)], fill=(255, 255, 255), width=max(1, height // 160))
-    return image
+def list_background_files(background_dirs: tuple[Path, ...] = BACKGROUND_DIRS) -> list[str]:
+    choices = []
+    seen = set()
+    for background_dir in background_dirs:
+        if not background_dir.exists():
+            continue
+        for image_path in sorted(background_dir.iterdir()):
+            if not image_path.is_file() or image_path.suffix.lower() not in BACKGROUND_SUFFIXES:
+                continue
+            name = image_path.stem
+            if name in seen:
+                continue
+            seen.add(name)
+            choices.append(name)
+    return choices
+
+
+def load_background(name: str, size: tuple[int, int], background_dirs: tuple[Path, ...] = BACKGROUND_DIRS) -> Image.Image:
+    image_path = find_background_file(name, background_dirs)
+    if image_path is None:
+        return Image.new("RGB", size, FALLBACK_BACKGROUND_COLOR)
+
+    return Image.open(image_path).convert("RGB")
+
+
+def find_background_file(name: str, background_dirs: tuple[Path, ...] = BACKGROUND_DIRS) -> Path | None:
+    for background_dir in background_dirs:
+        if not background_dir.exists():
+            continue
+        for image_path in sorted(background_dir.iterdir()):
+            if image_path.is_file() and image_path.suffix.lower() in BACKGROUND_SUFFIXES and image_path.stem == name:
+                return image_path
+    return None

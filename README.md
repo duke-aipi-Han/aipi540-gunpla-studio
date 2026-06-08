@@ -71,12 +71,14 @@ python main.py
 
 The app will start a local Gradio server. Upload a Gunpla image or take one with a phone camera, choose a segmentation method, then choose a default or uploaded background.
 
+To add reusable backgrounds, place image files in the top-level `backgrounds` folder. The app also loads packaged backgrounds from `gunpla_studio/backgrounds`. Supported extensions are `.jpg`, `.jpeg`, `.png`, `.bmp`, and `.webp`. The app displays each background by filename without the extension.
+
 ## Data
 
 Expected training data format is YOLO segmentation format:
 
 ```text
-data/processed/gunpla_seg/
+data/processed/gunpla-yolov7/
 ├── data.yaml
 ├── train
 │   ├── images
@@ -94,25 +96,63 @@ Each label file should contain one class, `gunpla`, with polygon coordinates nor
 If you have a Roboflow/Label Studio/CVAT export ZIP, place it in `data/raw` and run:
 
 ```bash
-python scripts/make_dataset.py --zip-path data/raw/your_export.zip --output-dir data/processed/gunpla_seg
+python scripts/make_dataset.py --zip-path data/raw/your_export.zip --output-dir data/processed/gunpla-yolov7
 ```
 
-## Train YOLO11n-Seg
+## Train YOLO11n
+
+Check the dataset first:
 
 ```bash
-python scripts/train_model.py --data data/processed/gunpla_seg/data.yaml --epochs 50 --imgsz 640
+python scripts/train_model.py --validate-only
 ```
+
+Start transfer-learning training on GPU 0:
+
+```bash
+python scripts/train_model.py --device 0
+```
+
+Training uses light augmentation by default: modest color jitter, small geometric transforms, horizontal flips, very low mosaic, and light random erasing. To run an ablation without augmentation:
+
+```bash
+python scripts/train_model.py --device 0 --augment-mode none
+```
+
+Available modes are `none`, `light`, and `strong`. `strong` uses heavier mosaic, mixup, copy-paste, and geometric transforms; it has not performed well so far on this small segmentation dataset.
 
 To force a specific GPU:
 
 ```bash
-python scripts/train_model.py --data data/processed/gunpla_seg/data.yaml --epochs 50 --imgsz 640 --device 0
+python scripts/train_model.py --data data/processed/gunpla-yolov7/data.yaml --epochs 50 --imgsz 640 --batch 4 --workers 0 --device 0
+```
+
+The default dataset is `data/processed/gunpla-yolov7/data.yaml`. The script inspects the labels before training. This dataset has YOLO polygon segmentation labels, so the default transfer-learning base model is `yolo11n-seg.pt`. If Roboflow split paths need correction, the script writes an Ultralytics-ready data file under `data/processed/gunpla-yolov7-ultralytics`.
+
+On Windows, keep `--workers 0` unless you have plenty of RAM and page file space. Multiple dataloader worker processes can each load PyTorch CUDA DLLs and trigger `[WinError 1455] The paging file is too small`.
+
+To make a cleaned copy that removes overlapping duplicate train/validation masks and keeps the largest overlapping mask:
+
+```bash
+python scripts/clean_overlapping_masks.py --overwrite
+```
+
+Train from the cleaned copy with:
+
+```bash
+python scripts/train_model.py --data data/processed/gunpla-yolov7-largest-mask/data.yaml --device 0 --workers 0
 ```
 
 The best model is copied to:
 
 ```text
-models/gunpla_yolo11n_seg.pt
+models/<run-name>.pt
+```
+
+By default, each training run gets a unique name like `gunpla_yolo11s_seg_img768_b2_aug_20260607_224500`, so previous results are not overwritten. To set a shorter name manually:
+
+```bash
+python scripts/train_model.py --device 0 --model yolo11s-seg.pt --run-name gunpla_yolo11s_light_aug
 ```
 
 Set `GUNPLA_MODEL_PATH` to use a different trained model in the app:
