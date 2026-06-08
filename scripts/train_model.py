@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import ast
 import sys
+from datetime import datetime
 import shutil
 from pathlib import Path
 from typing import Literal
@@ -223,10 +224,12 @@ def train(
     workers: int,
     cache: bool | str,
     amp: bool,
+    mask_ratio: int,
     task: str,
     model_name: str | None,
+    run_name: str | None,
     clip_labels: bool,
-    augment: bool,
+    augment_mode: str,
 ) -> Path:
     from ultralytics import YOLO
 
@@ -253,7 +256,8 @@ def train(
         model_name = "yolo11n-seg.pt"
 
     model = YOLO(model_name)
-    run_name = f"gunpla_yolo11n_{resolved_task}"
+    if run_name is None:
+        run_name = build_run_name(model_name, resolved_task, imgsz, batch, augment_mode)
     kwargs = {
         "data": str(train_data_yaml),
         "epochs": epochs,
@@ -270,12 +274,11 @@ def train(
         "workers": workers,
         "cache": cache,
         "amp": amp,
+        "mask_ratio": mask_ratio,
     }
-    if augment:
-        kwargs.update(get_augmentation_args())
-        print(f"Using data augmentation: {get_augmentation_args()}")
-    else:
-        print("Data augmentation disabled.")
+    augmentation_args = get_augmentation_args(augment_mode)
+    kwargs.update(augmentation_args)
+    print(f"Using {augment_mode} data augmentation: {augmentation_args}")
     if device:
         kwargs["device"] = device
 
@@ -293,25 +296,72 @@ def train(
     raise FileNotFoundError(f"Training finished, but best weights were not found at {best_path}")
 
 
-def get_augmentation_args() -> dict[str, float | int | str]:
-    """Conservative augmentation mix for small single-class segmentation data."""
-    return {
-        "hsv_h": 0.015,
-        "hsv_s": 0.45,
-        "hsv_v": 0.35,
-        "degrees": 12.0,
-        "translate": 0.12,
-        "scale": 0.55,
-        "shear": 4.0,
-        "perspective": 0.0008,
-        "flipud": 0.05,
-        "fliplr": 0.5,
-        "mosaic": 0.7,
-        "mixup": 0.08,
-        "copy_paste": 0.25,
-        "erasing": 0.25,
-        "close_mosaic": 10,
-    }
+def build_run_name(model_name: str, task: str, imgsz: int, batch: int, augment_mode: str) -> str:
+    model_stem = Path(model_name).stem.replace("-", "_")
+    task_label = "" if model_stem.endswith(f"_{task}") else f"_{task}"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"gunpla_{model_stem}{task_label}_img{imgsz}_b{batch}_{augment_mode}_{timestamp}"
+
+
+def get_augmentation_args(mode: str) -> dict[str, float | int | str]:
+    if mode == "none":
+        return {
+            "hsv_h": 0.0,
+            "hsv_s": 0.0,
+            "hsv_v": 0.0,
+            "degrees": 0.0,
+            "translate": 0.0,
+            "scale": 0.0,
+            "shear": 0.0,
+            "perspective": 0.0,
+            "flipud": 0.0,
+            "fliplr": 0.0,
+            "mosaic": 0.0,
+            "mixup": 0.0,
+            "copy_paste": 0.0,
+            "erasing": 0.0,
+            "auto_augment": None,
+            "close_mosaic": 0,
+        }
+    if mode == "light":
+        return {
+            "hsv_h": 0.01,
+            "hsv_s": 0.25,
+            "hsv_v": 0.20,
+            "degrees": 5.0,
+            "translate": 0.06,
+            "scale": 0.20,
+            "shear": 1.0,
+            "perspective": 0.0002,
+            "flipud": 0.0,
+            "fliplr": 0.5,
+            "mosaic": 0.15,
+            "mixup": 0.0,
+            "copy_paste": 0.0,
+            "erasing": 0.05,
+            "auto_augment": None,
+            "close_mosaic": 10,
+        }
+    if mode == "strong":
+        return {
+            "hsv_h": 0.015,
+            "hsv_s": 0.45,
+            "hsv_v": 0.35,
+            "degrees": 12.0,
+            "translate": 0.12,
+            "scale": 0.55,
+            "shear": 4.0,
+            "perspective": 0.0008,
+            "flipud": 0.05,
+            "fliplr": 0.5,
+            "mosaic": 0.7,
+            "mixup": 0.08,
+            "copy_paste": 0.25,
+            "erasing": 0.25,
+            "auto_augment": "randaugment",
+            "close_mosaic": 10,
+        }
+    raise ValueError("--augment-mode must be one of: none, light, strong")
 
 
 def main() -> None:
@@ -329,10 +379,13 @@ def main() -> None:
     )
     parser.add_argument("--cache", choices=["none", "ram", "disk"], default="none")
     parser.add_argument("--no-amp", action="store_true", help="Disable Automatic Mixed Precision checks/training.")
+    parser.add_argument("--mask-ratio", type=int, default=4, help="YOLO segmentation mask downsampling ratio. Try 2 for finer masks.")
     parser.add_argument("--task", choices=["auto", "seg"], default="auto")
     parser.add_argument("--model", type=str, default=None, help="Optional YOLO segmentation base model, e.g. yolo11n-seg.pt.")
+    parser.add_argument("--run-name", type=str, default=None, help="Optional explicit Ultralytics run name.")
     parser.add_argument("--no-clip-labels", action="store_true", help="Do not clip labels with coordinates outside [0, 1].")
-    parser.add_argument("--no-augment", action="store_true", help="Disable YOLO data augmentation during training.")
+    parser.add_argument("--augment-mode", choices=["none", "light", "strong"], default="light")
+    parser.add_argument("--no-augment", action="store_true", help="Deprecated alias for --augment-mode none.")
     parser.add_argument("--validate-only", action="store_true", help="Inspect dataset format and exit without training.")
     args = parser.parse_args()
     if args.validate_only:
@@ -350,10 +403,12 @@ def main() -> None:
         workers=args.workers,
         cache=False if args.cache == "none" else args.cache,
         amp=not args.no_amp,
+        mask_ratio=args.mask_ratio,
         task=args.task,
         model_name=args.model,
+        run_name=args.run_name,
         clip_labels=not args.no_clip_labels,
-        augment=not args.no_augment,
+        augment_mode="none" if args.no_augment else args.augment_mode,
     )
 
 

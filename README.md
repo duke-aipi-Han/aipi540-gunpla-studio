@@ -113,11 +113,13 @@ Start transfer-learning training on GPU 0:
 python scripts/train_model.py --device 0
 ```
 
-Training uses a default augmentation mix for robustness: color jitter, small rotations, translation, scale, shear, mild perspective, horizontal flips, light vertical flips, mosaic, mixup, copy-paste, and random erasing. To run an ablation without augmentation:
+Training uses light augmentation by default: modest color jitter, small geometric transforms, horizontal flips, very low mosaic, and light random erasing. To run an ablation without augmentation:
 
 ```bash
-python scripts/train_model.py --device 0 --no-augment
+python scripts/train_model.py --device 0 --augment-mode none
 ```
+
+Available modes are `none`, `light`, and `strong`. `strong` uses heavier mosaic, mixup, copy-paste, and geometric transforms; it has not performed well so far on this small segmentation dataset.
 
 To force a specific GPU:
 
@@ -129,10 +131,28 @@ The default dataset is `data/processed/gunpla-yolov7/data.yaml`. The script insp
 
 On Windows, keep `--workers 0` unless you have plenty of RAM and page file space. Multiple dataloader worker processes can each load PyTorch CUDA DLLs and trigger `[WinError 1455] The paging file is too small`.
 
+To make a cleaned copy that removes overlapping duplicate train/validation masks and keeps the largest overlapping mask:
+
+```bash
+python scripts/clean_overlapping_masks.py --overwrite
+```
+
+Train from the cleaned copy with:
+
+```bash
+python scripts/train_model.py --data data/processed/gunpla-yolov7-largest-mask/data.yaml --device 0 --workers 0
+```
+
 The best model is copied to:
 
 ```text
-models/gunpla_yolo11n_seg.pt
+models/<run-name>.pt
+```
+
+By default, each training run gets a unique name like `gunpla_yolo11s_seg_img768_b2_aug_20260607_224500`, so previous results are not overwritten. To set a shorter name manually:
+
+```bash
+python scripts/train_model.py --device 0 --model yolo11s-seg.pt --run-name gunpla_yolo11s_light_aug
 ```
 
 Set `GUNPLA_MODEL_PATH` to use a different trained model in the app:
