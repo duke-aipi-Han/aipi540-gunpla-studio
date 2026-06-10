@@ -8,7 +8,12 @@ import numpy as np
 from PIL import Image
 
 from gunpla_studio.backgrounds import get_background_choices, load_background
-from gunpla_studio.image_utils import composite_overlay, ensure_rgb_image, make_foreground_overlay
+from gunpla_studio.image_utils import (
+    composite_overlay,
+    ensure_rgb_image,
+    make_foreground_overlay,
+    resize_image_to_max_side,
+)
 from gunpla_studio.segmenters import (
     ClassicalMLSegmenter,
     NaiveBaselineSegmenter,
@@ -18,11 +23,12 @@ from gunpla_studio.segmenters import (
 
 
 MODEL_PATH = Path(os.getenv("GUNPLA_MODEL_PATH", "models/gunpla_yolo11n_seg.pt"))
+MAX_IMAGE_SIDE = int(os.getenv("GUNPLA_MAX_IMAGE_SIDE", "1280"))
 
 SEGMENTERS = {
     "Naive baseline": NaiveBaselineSegmenter(),
     "Classical ML (GrabCut)": ClassicalMLSegmenter(),
-    "Deep learning (YOLO11n-seg)": YOLOSegSegmenter(MODEL_PATH),
+    "Deep learning (YOLO11n-seg)": YOLOSegSegmenter(MODEL_PATH, imgsz=MAX_IMAGE_SIDE),
 }
 BACKGROUND_CHOICES = get_background_choices()
 DEFAULT_BACKGROUND = BACKGROUND_CHOICES[0] if BACKGROUND_CHOICES else "Studio gray"
@@ -53,14 +59,16 @@ def run_studio(
             gr.update(visible=False),
         )
 
-    image = ensure_rgb_image(gunpla_image)
+    image = resize_image_to_max_side(ensure_rgb_image(gunpla_image), MAX_IMAGE_SIDE)
     segmenter = SEGMENTERS[method]
     result: SegmentationResult = segmenter.segment(image)
 
     if custom_background is None:
         background = load_background(default_background, image.size)
     else:
-        background = ensure_rgb_image(custom_background)
+        background = resize_image_to_max_side(ensure_rgb_image(custom_background), MAX_IMAGE_SIDE)
+
+    background = resize_image_to_max_side(background, MAX_IMAGE_SIDE)
 
     overlay = make_foreground_overlay(image, result.mask)
     composite = composite_overlay(background, overlay)

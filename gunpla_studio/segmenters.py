@@ -78,8 +78,9 @@ class ClassicalMLSegmenter(BaseSegmenter):
 class YOLOSegSegmenter(BaseSegmenter):
     name = "Deep learning (YOLO11n-seg)"
 
-    def __init__(self, model_path: str | Path) -> None:
+    def __init__(self, model_path: str | Path, imgsz: int = 1280) -> None:
         self.model_path = Path(model_path)
+        self.imgsz = imgsz
         self._model = None
         self._load_error: str | None = None
 
@@ -108,7 +109,7 @@ class YOLOSegSegmenter(BaseSegmenter):
             )
 
         rgb = np.array(image.convert("RGB"))
-        results = model.predict(rgb, conf=0.25, verbose=False)
+        results = model.predict(rgb, imgsz=self.imgsz, conf=0.25, verbose=False)
         height, width = rgb.shape[:2]
 
         if not results or results[0].masks is None:

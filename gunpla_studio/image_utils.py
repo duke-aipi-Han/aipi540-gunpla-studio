@@ -10,6 +10,17 @@ def ensure_rgb_image(image: Image.Image | np.ndarray) -> Image.Image:
     return image.convert("RGB")
 
 
+def resize_image_to_max_side(image: Image.Image, max_side: int) -> Image.Image:
+    width, height = image.size
+    longest_side = max(width, height)
+    if longest_side <= max_side:
+        return image
+
+    scale = max_side / longest_side
+    size = (max(1, int(width * scale)), max(1, int(height * scale)))
+    return image.resize(size, Image.Resampling.LANCZOS)
+
+
 def normalize_mask(mask: np.ndarray) -> np.ndarray:
     mask = np.asarray(mask, dtype=np.float32)
     if mask.max() > 1:
