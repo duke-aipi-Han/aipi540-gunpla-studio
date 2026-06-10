@@ -40,7 +40,7 @@ class NaiveBaselineSegmenter(BaseSegmenter):
         ellipse = ((xx - center_x) / radius_x) ** 2 + ((yy - center_y) / radius_y) ** 2 <= 1.0
         mask[ellipse] = 1.0
 
-        return SegmentationResult(mask, self.name, "Used a center ellipse as a weak foreground prior.")
+        return SegmentationResult(mask, self.name, "Used a center ellipse to create default foreground mask.")
 
 
 class ClassicalMLSegmenter(BaseSegmenter):
@@ -67,7 +67,7 @@ class ClassicalMLSegmenter(BaseSegmenter):
                 0.0,
             ).astype(np.float32)
             mask = _postprocess_mask(mask)
-            message = "Estimated foreground with GrabCut initialized from an image-border prior."
+            message = "Estimated foreground with GrabCut initialized from an image-border."
         except cv2.error as exc:
             mask = NaiveBaselineSegmenter().segment(image).mask
             message = f"GrabCut failed, fell back to naive baseline: {exc}"

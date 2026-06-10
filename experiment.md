@@ -10,8 +10,8 @@ The main metric for this project is mask quality, especially `metrics/mAP50(M)`,
 
 | Run | Model | Data | Augmentation | Epochs Run | Best Epoch | Box mAP50 | Box mAP50-95 | Mask Precision | Mask Recall | Mask mAP50 | Mask mAP50-95 | Notes |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| `gunpla_yolo11n_seg` | `yolo11s-seg.pt` | `gunpla-yolov7-ultralytics` | strong: mosaic `0.7`, mixup `0.08`, copy-paste `0.25`, geometric transforms | 27 | 12 | 0.214 | 0.054 | 0.122 | 0.304 | 0.094 | 0.019 | Poor run. Strong augmentation destabilized training. |
-| `gunpla_yolo11s_seg_img768_b2_noaug_20260607_225002` | `yolo11s-seg.pt` | `gunpla-yolov7-ultralytics` | intended no aug, but Ultralytics default mosaic was still active: mosaic `1.0` | 100 | 61 | 0.594 | 0.226 | 0.725 | 0.217 | 0.252 | 0.136 | High precision, weak recall. Not actually no augmentation. |
+| `gunpla_yolo11n_seg` | `yolo11s-seg.pt` | `gunpla-yolov7 | strong: mosaic `0.7`, mixup `0.08`, copy-paste `0.25`, geometric transforms | 27 | 12 | 0.214 | 0.054 | 0.122 | 0.304 | 0.094 | 0.019 | Poor run. Strong augmentation destabilized training. |
+| `gunpla_yolo11s_seg_img768_b2_noaug_20260607_225002` | `yolo11s-seg.pt` | `gunpla-yolov7 | intended no aug, but Ultralytics default mosaic was still active: mosaic `1.0` | 100 | 61 | 0.594 | 0.226 | 0.725 | 0.217 | 0.252 | 0.136 | High precision, weak recall. Not actually no augmentation. |
 | `gunpla_yolo11n_seg_img768_b2_none_20260607_232159` | `yolo11n-seg.pt` | `gunpla-yolov7` | none: mosaic `0`, flips off, geometric/color aug off | 37 | 17 | 0.650 | 0.201 | 0.381 | 0.339 | 0.269 | 0.074 | Better recall behavior, but lower mask mAP50-95. Early stopped. |
 | `gunpla_yolo11n_seg_img768_b2_light_20260608_072123` | `yolo11n-seg.pt` | `gunpla-yolov7` | light: mosaic `0.15`, degrees `5`, translate `0.06`, scale `0.2`, horizontal flip, erasing `0.05` | 75 | 60 | 0.896 | 0.423 | 0.602 | 0.600 | 0.553 | 0.258 | Best run so far. Balanced precision/recall and strongest mask mAP. |
 | `gunpla_yolo11s_seg_img768_b2_light_20260608_075636` | `yolo11s-seg.pt` | `gunpla-yolov7` | light: mosaic `0.15`, degrees `5`, translate `0.06`, scale `0.2`, horizontal flip, erasing `0.05` | 100 | 88 | 0.963 | 0.440 | 0.535 | 0.575 | 0.473 | 0.164 | Better box detector than `11n`, but worse masks. Not preferred for compositing. |
@@ -32,39 +32,3 @@ mask_ratio=2: mask precision 0.711, recall 0.700, mAP50 0.592, mAP50-95 0.222
 
 Visually, `mask_ratio=2` finds more of the object and produces higher-confidence predictions, but it also shows more mask spill/background blobs in some validation examples. `mask_ratio=4` is more conservative and scores better on stricter IoU. For the app, compare both on real compositing examples before choosing the deployment model.
 
-## Next Experiment
-
-The recent `gunpla-yolov7` runs should be treated as largest-mask-label runs because the cleaned labels were copied into that dataset directory before these experiments. The next useful experiment should test whether higher input resolution improves mask detail without changing the otherwise successful recipe:
-
-```powershell
-py -3.13 scripts\train_model.py --model yolo11n-seg.pt --epochs 100 --imgsz 960 --batch 1 --workers 0 --device 0 --augment-mode light
-```
-
-This is targeted at the remaining failure mode: masks are detected, but edges and thin parts are still rough. If GPU memory allows, also test the higher resolution with finer masks:
-
-```powershell
-py -3.13 scripts\train_model.py --model yolo11n-seg.pt --epochs 100 --imgsz 960 --batch 1 --workers 0 --device 0 --augment-mode light --mask-ratio 2
-```
-
-This is more memory-intensive, but it tests whether the mask-ratio benefit becomes cleaner when the input resolution is higher.
-
-Do not prioritize more `11s` runs yet. `11s + light` took longer and produced better boxes but worse masks:
-
-```text
-11n + light: mask mAP50 0.553, mask mAP50-95 0.258
-11s + light: mask mAP50 0.473, mask mAP50-95 0.164
-```
-
-For the app, start by comparing these two models side by side on several user photos and background composites:
-
-```powershell
-$env:GUNPLA_MODEL_PATH="models/gunpla_yolo11n_seg_img768_b2_light_20260608_072123.pt"
-python main.py
-```
-
-```powershell
-$env:GUNPLA_MODEL_PATH="models/gunpla_yolo11n_seg_img768_b2_light_20260608_082711.pt"
-python main.py
-```
-
-Avoid `strong` augmentation for now. It produced the worst results and is not a good fit for the current dataset size and label quality.

@@ -2,26 +2,31 @@
 
 ## Problem Statement
 
-It's fun to build Gunpla (or Gundam robot models).
-See: https://global.bandai-hobby.net/en-us/gunpla/ for examples of model kits.
+It's fun to build Gunpla (or Gundam robot models). See: https://global.bandai-hobby.net/en-us/gunpla/ for examples of model kits.
 
-Once built, it is fun to pose them and take pictures of them. Wouldn't it be great to take the models that you just built, pose them, and then put them on other backgrounds?
+Once built, it is fun to pose them and take pictures of them. Wouldn't it be great to take the models that you just built, pose them, and then put them on custom backgrounds? This way you can share your latest build or pose on a background other than your home. 
 
-Gunpla Studio lets you do just that.
+Gunpla Studio lets you do just that. It's basically green-screen for your Gunpla!
+Access it at: https://hw391-gunpla-studio.hf.space/
 
 ## Data Sources
+While there are plenty of Gundam/Gunpla pictures on the internet, many of them are copyrighted. There are also no publically available labeled (and segmented) Gunpla pictures either (at least not "hundreds").
 
-
+So I took 200 pictures of my son's Gunpla creations with my phone, uploaded them into Roboflow's Annotate, and used their SAM3 autodetect feature to label those pictures to use as starting point for training using transfer learning on top of YOLO foundation model for instance segmentation.
 
 ## Related Work
+There are plenty of hobby/community sites that have pictures of Gunpla/Gundams. Especially from the creators: Bandai. https://global.bandai-hobby.net/en-us/gunpla/
 
-
+There are very few public projects for Gunpla detection.
 
 ## Review of Relevant Prior Work and Literature
+There are very few CV projects around gunpla detection. There is a tiny dataset with a trained model here: https://universe.roboflow.com/hotd-2/gunpla/dataset/1
 
-
+Related are humaniod robot detection models, and the "robot" detection for some models such as SAM3 works pretty well. However, Gunpla models have many models with similar designs and color schemes, and deserve its own detection and segmentation model.
 
 ## Evaluation Strategy & Metrics
+
+The goal of this project is to use instance segmentation to create a mask, so that the gunpla can then be overlaid on top of a background image "seamlessly" so that it is visually pleasing.
 
 The primary metric should be mask mean Intersection over Union (mIoU), because the application depends on the overlap between predicted and ground-truth Gunpla pixels. A model that finds the object but loses antennas, weapons, or feet will produce visibly poor composites, and mIoU directly penalizes those errors.
 
@@ -29,44 +34,41 @@ Secondary metrics should include Dice/F1 score, precision, recall, boundary F1, 
 
 ## Metric Selection and Justification
 
-mIoU is the critical metric because the task is segmentation, not only classification or detection. It evaluates the exact target surface area used for compositing. Dice/F1 complements mIoU by being easier to interpret for foreground/background imbalance. Precision and recall diagnose different failure modes: low precision means the app carries old background into the composite, while low recall means the robot appears clipped. Boundary F1 is included because a mask with high interior overlap can still look bad if edges are jagged or incomplete.
+mIoU is the critical metric because the task is segmentation for creating image masks, not only classification or detection. It evaluates the exact target surface area used for composite imaging. Dice/F1 complements mIoU by being easier to interpret for foreground/background imbalance. Precision and recall diagnose different failure modes: low precision means the app carries old background into the composite, while low recall means the robot appears clipped or missing parts. Boundary F1 is included because a mask with high interior overlap can still look bad if edges are jagged or incomplete.
 
 ## Modeling Approach
 
 The project uses a common `BaseSegmenter` interface with three implementations:
 
-- Naive baseline: ???
-- Classical ML model: ???
+- Naive baseline: A centered ellipse as a reasonable first attempt
+- Classical ML model: GrabCut as part of openCV
 - Deep learning model: uses a fine-tuned YOLO11n-seg model for single-class Gunpla segmentation.
 
-The interface allows the Gradio app to switch methods without changing UI logic.
+The interface allows the Gradio app to switch methods without changing UI logic, hidden in the "Power user options", to compare results.
 
 ## Data Processing Pipeline
 
-1. Collect raw Gunpla images from multiple camera devices, lighting conditions, poses, and backgrounds.
-2. Annotate each visible Gunpla with a polygon mask using an annotation tool.
+1. Collect raw Gunpla images from "clean" background, different Gundams, different poses, and different orientation.
+2. Annotate each visible Gunpla with a polygon mask using an annotation tool (Roboflow Annotate)
 3. Export labels in YOLO segmentation format with one class: `gunpla`.
 4. Split data into train, validation, and test sets by physical model where possible, not just by image, to reduce leakage.
-5. Build image summary features with `scripts/build_features.py` to ???
-6. Train YOLO11n-seg using `scripts/train_model.py`.
-7. Save best weights to `models/gunpla_yolo11n_seg.pt`.
-8. Evaluate all models on the same held-out test set.
-
-Each step supports reproducibility and lowers leakage risk. The split-by-model recommendation matters because near-duplicate photos of the same kit can overstate performance.
+5. Train YOLO11n-seg using `scripts/train_model.py`.
+6. Save best weights to `models/gunpla_yolo11n_seg.pt`.
+7. Evaluate all models on the same held-out test set.
 
 ## Hyperparameter Tuning Strategy
 
 Initial tuning should focus on image size, epochs, augmentation strength, confidence threshold, and mask post-processing. Recommended experiments:
 
-- Image sizes: 512, 640, 768.
-- Epochs: 30, 50, 100 with early stopping.
-- Batch size: largest stable batch for available GPU memory.
-- Confidence threshold: 0.15, 0.25, 0.40.
-- Augmentations: compare default YOLO augmentations against stronger brightness, scale, perspective, and copy-paste settings.
+- Image sizes: 512, 640, 768. 768 was settled on.
+- Epochs: 30, 50, 100 with early stopping. 100 was the typical limit
+The biggest tuning turned out to be Augmentations
+- Augmentations: compare default YOLO augmentations against stronger brightness, scale, perspective, and copy-paste settings. Too much augmentation actually generated bad results for 11s.
 
 The validation set should select hyperparameters using mIoU first, then boundary F1 and qualitative composite review.
 
 ## Models Evaluated
+The data was setup assuming a YOLO model. Experiments were run using YOLO11n and YOLO11s
 
 ### Naive Baseline
 
@@ -74,11 +76,11 @@ The naive baseline predicts a centered ellipse. It is intentionally weak but use
 
 ### Classical ML Model
 
-The classical model uses ???. It provides a data-free segmentation method that can outperform the naive baseline when the Gunpla is centered and visually separated from the background.
+The classical model uses GrabCut (from OpenCV library) It provides a data-free segmentation method that can outperform the naive baseline when the Gunpla is centered and visually separated from the background. It generated decent results but often misses "parts".
 
 ### Deep Learning Model
 
-The deep learning model fine-tunes YOLO11n-seg. It is expected to perform best because it learns shape, pose, color, and context cues from annotated data and returns instance masks directly.
+The deep learning model fine-tunes YOLO11n-seg. It is expected to perform best because it learns shape, pose, color, and context cues from annotated data and returns instance masks directly. This is balanced with available resources and CPU inference on host.
 
 ## Results
 
