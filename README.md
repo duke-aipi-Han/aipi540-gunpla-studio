@@ -40,15 +40,16 @@ The project includes three segmentation implementations behind one interface as 
 │   └── train_model.py
 ├── gunpla_studio
 │   ├── __init__.py
-│   ├── backgrounds.py
-│   ├── image_utils.py
-│   └── segmenters.py
+│   ├── backgrounds.py - background loader
+│   ├── image_utils.py - helper functions
+│   └── segmenters.py - 3 different segmenters
 ├── models - generated models go here
-├── data
+│   ├── gunpla_yolo11n_seg.pt - the "best" model should be renamed as this
+├── data - not checked into Git
 │   ├── raw
 │   ├── processed
 │   └── outputs
-└── notebooks
+└── notebooks - notebooks for testing and visualizing input and results
 ```
 
 ## Setup
@@ -59,7 +60,7 @@ Use Python 3.13.
 python -m venv .venv
 .venv\Scripts\activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements-gpu-cu128.txt
+python -m pip install -r requirements-gpu-cu128.txt #if have GPU for training
 python -m pip install -r requirements.txt
 ```
 

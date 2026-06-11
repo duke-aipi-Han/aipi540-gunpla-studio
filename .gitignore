@@ -26,5 +26,6 @@ runs/
 models/runs/
 
 .env
+.vscode/
 .DS_Store
 Thumbs.db
